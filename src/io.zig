@@ -3,7 +3,9 @@ const std = @import("std");
 const Editor = @import("editor.zig");
 const terminal = @import("terminal.zig");
 
-pub fn ctrlKey(key: u8) u8 {
+const keyFromEnum = Editor.Key.intFromEnum;
+
+pub fn ctrlKey(key: u32) u32 {
     return key & 0x1F;
 }
 
@@ -12,6 +14,17 @@ pub fn processKeypress(editor: *Editor) !bool {
 
     switch (key) {
         ctrlKey('q') => return false,
+
+        keyFromEnum(.ARROW_UP),
+        keyFromEnum(.ARROW_DOWN),
+        keyFromEnum(.ARROW_LEFT),
+        keyFromEnum(.ARROW_RIGHT),
+        keyFromEnum(.HOME),
+        keyFromEnum(.END),
+        keyFromEnum(.PAGE_UP),
+        keyFromEnum(.PAGE_DOWN),
+        => moveCursor(editor, @enumFromInt(key)),
+
         else => {},
     }
 
@@ -19,13 +32,15 @@ pub fn processKeypress(editor: *Editor) !bool {
 }
 
 pub fn refreshScreen(editor: *Editor) !void {
-    try editor.writer.writeAll("\x1b[?25l");
+    try editor.writer.writeAll("\x1B[?25l");
     try editor.writer.writeAll("\x1B[H");
 
     try drawRows(editor);
 
+    try editor.writer.print("\x1B[{};{}H", .{ editor.cursor.y + 1, editor.cursor.x + 1 });
+
     try editor.writer.writeAll("\x1B[H");
-    try editor.writer.writeAll("\x1b[?25h");
+    try editor.writer.writeAll("\x1B[?25h");
 }
 
 fn drawRows(editor: *Editor) !void {
@@ -49,8 +64,37 @@ fn drawRows(editor: *Editor) !void {
             try writer.writeByte('~');
         }
 
+        if (row == 0) {
+            try editor.writer.print(" {d}:{d}", .{ editor.cursor.y, editor.cursor.x });
+        }
+
         if (row < editor.screen.ws_row - 1) {
             try editor.writer.writeAll("\r\n");
         }
+    }
+}
+
+fn moveCursor(editor: *Editor, key: Editor.Key) void {
+    switch (key) {
+        .ARROW_LEFT => if (editor.cursor.x > 0) {
+            editor.cursor.x -= 1;
+        },
+        .ARROW_DOWN => if (editor.cursor.y < editor.screen.ws_row - 1) {
+            editor.cursor.y += 1;
+        },
+        .ARROW_UP => if (editor.cursor.y > 0) {
+            editor.cursor.y -= 1;
+        },
+        .ARROW_RIGHT => if (editor.cursor.x < editor.screen.ws_col - 1) {
+            editor.cursor.x += 1;
+        },
+
+        .HOME => editor.cursor.x = 0,
+        .END => editor.cursor.x = editor.screen.ws_col - 1,
+
+        .PAGE_UP => editor.cursor.y = 0,
+        .PAGE_DOWN => editor.cursor.y = editor.screen.ws_row - 1,
+
+        // else => {},
     }
 }

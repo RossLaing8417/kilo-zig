@@ -19,6 +19,7 @@ pub fn main() !void {
         .writer = out_stream.writer(),
         .orig_termios = try terminal.enableRawMode(),
         .screen = try terminal.getWindowSize(),
+        .cursor = .{ .x = 0, .y = 0 },
     };
 
     defer terminal.disableRawMode(editor.orig_termios) catch |err| {
