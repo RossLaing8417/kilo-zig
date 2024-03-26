@@ -5,6 +5,8 @@ pub const Writer = std.io.BufferedWriter(4096, std.io.Writer(std.fs.File, std.fs
 
 pub const WinSize = std.os.system.winsize;
 
+pub const VERSION = "0.0.1";
+
 allocator: std.mem.Allocator,
 reader: Reader,
 writer: Writer,
