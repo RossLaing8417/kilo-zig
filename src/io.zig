@@ -38,6 +38,7 @@ pub fn refreshScreen(editor: *Editor) !void {
     try editor.writer.writeAll("\x1B[H");
 
     try drawRows(editor);
+    try drawStatusBar(editor);
 
     try editor.writer.print("\x1B[{};{}H", .{
         (editor.cursor.y - editor.row_offset) + 1,
@@ -51,10 +52,11 @@ pub fn refreshScreen(editor: *Editor) !void {
 fn drawRows(editor: *Editor) !void {
     var writer = editor.writer;
     const rows = editor.rows orelse &[_][]u8{};
+    const drawable = editor.screen.ws_row - 1;
 
-    for (0..editor.screen.ws_row, editor.row_offset..) |screen_row, file_row| {
+    for (0..drawable, editor.row_offset..) |screen_row, file_row| {
         if (rows.len == 0 or file_row >= rows.len) {
-            if (rows.len > 0 and screen_row == editor.screen.ws_row / 3) {
+            if (rows.len > 0 and screen_row == drawable / 3) {
                 const message = "Kilo editor -- version " ++ Editor.VERSION;
                 const length = @min(message.len, editor.screen.ws_col);
                 const padding = (editor.screen.ws_col - length) / 2;
@@ -89,10 +91,45 @@ fn drawRows(editor: *Editor) !void {
         }
 
         try writer.writeAll("\x1B[K");
-        if (screen_row < editor.screen.ws_row - 1) {
-            try writer.writeAll("\r\n");
-        }
+        try writer.writeAll("\r\n");
     }
+}
+
+fn drawStatusBar(editor: *Editor) !void {
+    var writer = editor.writer;
+    var buffer = try std.BoundedArray(u8, 512).init(0);
+    var buf_writer = buffer.writer();
+
+    try writer.writeAll("\x1B[7m");
+
+    // var itr = std.mem.splitBackwardsSequence(u8, editor.file_name, "/");
+    // const name = itr.first();
+
+    try buf_writer.print("{s} - {d} lines", .{
+        if (editor.file_name.len > 0) editor.file_name else "[No Name]",
+        if (editor.rows) |rows| rows.len else 0,
+    });
+
+    const fstat_len = blk: {
+        var slice = buffer.constSlice();
+        try writer.writeAll(slice);
+        break :blk slice.len;
+    };
+
+    try buffer.resize(0);
+
+    try buf_writer.print("{d}/{d}", .{
+        editor.cursor.y + 1,
+        if (editor.rows) |rows| rows.len else 0,
+    });
+
+    var slice = buffer.constSlice();
+
+    try writer.writeByteNTimes(' ', if (fstat_len + slice.len > editor.screen.ws_col) 0 else editor.screen.ws_col - fstat_len - slice.len);
+
+    try writer.writeAll(slice);
+
+    try writer.writeAll("\x1B[m");
 }
 
 fn moveCursor(editor: *Editor, key: Editor.Key) void {

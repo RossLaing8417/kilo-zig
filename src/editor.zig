@@ -30,6 +30,7 @@ pub const Key = enum(u32) {
 const Coord = struct { x: usize, y: usize };
 
 allocator: std.mem.Allocator,
+file_name: []const u8,
 reader: Reader,
 writer: Writer,
 orig_termios: std.os.termios,
@@ -49,6 +50,7 @@ pub fn init(
 ) Editor {
     return .{
         .allocator = allocator,
+        .file_name = "",
         .reader = reader,
         .writer = writer,
         .orig_termios = orig_termios,
@@ -83,6 +85,7 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
 
     self.freeRows();
 
+    self.file_name = file_name;
     self.rows = try self.allocator.alloc([]u8, std.mem.count(u8, source, "\n") + 1);
     var rows = self.rows.?;
 
