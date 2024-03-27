@@ -33,6 +33,7 @@ orig_termios: std.os.termios,
 screen: WinSize,
 cursor: struct { x: usize, y: usize },
 row_offset: usize,
+col_offset: usize,
 rows: ?[][]u8,
 
 pub fn init(
@@ -50,6 +51,7 @@ pub fn init(
         .screen = screen,
         .cursor = .{ .x = 0, .y = 0 },
         .row_offset = 0,
+        .col_offset = 0,
         .rows = null,
     };
 }
@@ -96,5 +98,11 @@ pub fn scroll(self: *Editor) void {
     }
     if (self.cursor.y >= self.row_offset + self.screen.ws_row) {
         self.row_offset = self.cursor.y - self.screen.ws_row + 1;
+    }
+    if (self.cursor.x < self.col_offset) {
+        self.col_offset = self.cursor.x;
+    }
+    if (self.cursor.x >= self.col_offset + self.screen.ws_col) {
+        self.col_offset = self.cursor.x - self.screen.ws_col + 1;
     }
 }

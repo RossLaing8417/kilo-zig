@@ -39,7 +39,10 @@ pub fn refreshScreen(editor: *Editor) !void {
 
     try drawRows(editor);
 
-    try editor.writer.print("\x1B[{};{}H", .{ editor.cursor.y - editor.row_offset, editor.cursor.x + 1 });
+    try editor.writer.print("\x1B[{};{}H", .{
+        (editor.cursor.y - editor.row_offset) + 1,
+        (editor.cursor.x - editor.col_offset) + 1,
+    });
 
     try editor.writer.writeAll("\x1B[H");
     try editor.writer.writeAll("\x1B[?25h");
@@ -66,7 +69,19 @@ fn drawRows(editor: *Editor) !void {
                 try writer.writeByte('~');
             }
         } else if (rows.len > 0) {
-            try writer.writeAll(rows[file_row][0..@min(rows[file_row].len, editor.screen.ws_col)]);
+            const row = rows[file_row];
+            if (row.len > 0 and editor.col_offset < row.len) {
+                const start = @min(row.len - 1, editor.col_offset);
+                const end = @min(row.len, editor.screen.ws_col);
+                // try writer.print("{d} -- {d}:{d} ({d}:{d}) -- ", .{
+                //     editor.col_offset,
+                //     start,
+                //     end,
+                //     row.len,
+                //     @min(row.len - 1, editor.col_offset),
+                // });
+                try writer.writeAll(row[start..end]);
+            }
         }
 
         if (screen_row == 0) {
@@ -82,6 +97,8 @@ fn drawRows(editor: *Editor) !void {
 
 fn moveCursor(editor: *Editor, key: Editor.Key) void {
     const rows = editor.rows orelse &[_][]u8{};
+    var row = if (editor.cursor.y >= rows.len) &[_]u8{} else rows[editor.cursor.y];
+
     switch (key) {
         .ARROW_LEFT => if (editor.cursor.x > 0) {
             editor.cursor.x -= 1;
@@ -92,16 +109,21 @@ fn moveCursor(editor: *Editor, key: Editor.Key) void {
         .ARROW_UP => if (editor.cursor.y > 0) {
             editor.cursor.y -= 1;
         },
-        .ARROW_RIGHT => if (editor.cursor.x < editor.screen.ws_col - 1) {
+        .ARROW_RIGHT => if (editor.cursor.x < row.len) {
             editor.cursor.x += 1;
         },
 
         .HOME => editor.cursor.x = 0,
-        .END => editor.cursor.x = editor.screen.ws_col - 1,
+        .END => editor.cursor.x = row.len,
 
         .PAGE_UP => editor.cursor.y = 0,
         .PAGE_DOWN => editor.cursor.y = editor.screen.ws_row - 1,
 
         else => {},
+    }
+
+    row = if (editor.cursor.y >= rows.len) &[_]u8{} else rows[editor.cursor.y];
+    if (editor.cursor.x > row.len) {
+        editor.cursor.x = row.len;
     }
 }
