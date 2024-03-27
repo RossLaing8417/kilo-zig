@@ -102,6 +102,9 @@ fn moveCursor(editor: *Editor, key: Editor.Key) void {
     switch (key) {
         .ARROW_LEFT => if (editor.cursor.x > 0) {
             editor.cursor.x -= 1;
+        } else if (editor.cursor.y > 0) {
+            editor.cursor.y -= 1;
+            editor.cursor.x = rows[editor.cursor.y].len;
         },
         .ARROW_DOWN => if (editor.cursor.y < rows.len) {
             editor.cursor.y += 1;
@@ -111,6 +114,9 @@ fn moveCursor(editor: *Editor, key: Editor.Key) void {
         },
         .ARROW_RIGHT => if (editor.cursor.x < row.len) {
             editor.cursor.x += 1;
+        } else if (editor.cursor.y < rows.len and editor.cursor.x == row.len) {
+            editor.cursor.y += 1;
+            editor.cursor.x = 0;
         },
 
         .HOME => editor.cursor.x = 0,
