@@ -76,3 +76,12 @@ pub fn getWindowSize() !Editor.WinSize {
     }
     return size;
 }
+
+pub fn render(writer: Editor.Writer, buffer: []const u8) !void {
+    for (buffer) |byte| {
+        switch (byte) {
+            '\t' => try writer.writeByteNTimes(' ', Editor.TAB_STOP),
+            else => try writer.writeByte(byte),
+        }
+    }
+}

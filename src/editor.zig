@@ -8,6 +8,7 @@ pub const Writer = std.io.BufferedWriter(4096, std.io.Writer(std.fs.File, std.fs
 pub const WinSize = std.os.system.winsize;
 
 pub const VERSION = "0.0.1";
+pub const TAB_STOP = 4;
 
 pub const Key = enum(u32) {
     ARROW_UP = 1000,
@@ -26,12 +27,15 @@ pub const Key = enum(u32) {
     }
 };
 
+const Coord = struct { x: usize, y: usize };
+
 allocator: std.mem.Allocator,
 reader: Reader,
 writer: Writer,
 orig_termios: std.os.termios,
 screen: WinSize,
-cursor: struct { x: usize, y: usize },
+cursor: Coord,
+render: Coord,
 row_offset: usize,
 col_offset: usize,
 rows: ?[][]u8,
@@ -50,6 +54,7 @@ pub fn init(
         .orig_termios = orig_termios,
         .screen = screen,
         .cursor = .{ .x = 0, .y = 0 },
+        .render = .{ .x = 0, .y = 0 },
         .row_offset = 0,
         .col_offset = 0,
         .rows = null,
@@ -93,6 +98,12 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
 }
 
 pub fn scroll(self: *Editor) void {
+    self.render.x = 0;
+
+    if (self.rows != null and self.cursor.y < self.rows.?.len) {
+        self.render = cursorToRender(self.rows.?[self.cursor.y], self.cursor);
+    }
+
     if (self.cursor.y < self.row_offset) {
         self.row_offset = self.cursor.y;
     }
@@ -105,4 +116,21 @@ pub fn scroll(self: *Editor) void {
     if (self.cursor.x >= self.col_offset + self.screen.ws_col) {
         self.col_offset = self.cursor.x - self.screen.ws_col + 1;
     }
+    if (self.render.x < self.col_offset) {
+        self.col_offset = self.render.x;
+    }
+    if (self.render.x >= self.col_offset + self.screen.ws_col) {
+        self.col_offset = self.render.x - self.screen.ws_col + 1;
+    }
+}
+
+fn cursorToRender(row: []const u8, cursor: Coord) Coord {
+    var render: Coord = .{ .x = 0, .y = 0 };
+    for (0..cursor.x) |x| {
+        if (row[x] == '\t') {
+            render.x += (TAB_STOP - 1) - (render.x % TAB_STOP);
+        }
+        render.x += 1;
+    }
+    return render;
 }

@@ -41,7 +41,7 @@ pub fn refreshScreen(editor: *Editor) !void {
 
     try editor.writer.print("\x1B[{};{}H", .{
         (editor.cursor.y - editor.row_offset) + 1,
-        (editor.cursor.x - editor.col_offset) + 1,
+        (editor.render.x - editor.col_offset) + 1,
     });
 
     try editor.writer.writeAll("\x1B[H");
@@ -80,7 +80,7 @@ fn drawRows(editor: *Editor) !void {
                 //     row.len,
                 //     @min(row.len - 1, editor.col_offset),
                 // });
-                try writer.writeAll(row[start..end]);
+                try terminal.render(writer, row[start..end]);
             }
         }
 
