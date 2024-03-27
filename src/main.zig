@@ -13,7 +13,7 @@ pub fn main() !void {
     var out_stream = std.io.bufferedWriter(std.io.getStdOut().writer());
     defer out_stream.flush() catch {};
 
-    var editor = Editor.init(
+    var editor = try Editor.init(
         allocator,
         std.io.getStdIn().reader(),
         out_stream.writer(),
@@ -40,12 +40,7 @@ pub fn main() !void {
         std.debug.panic("Error refreshing screen:\r\n{}\r\n", .{err});
     };
 
-    // var file: std.fs.File = .{
-    //     .handle = std.os.STDIN_FILENO,
-    //     .capable_io_mode = .evented,
-    //     .intended_io_mode = .evented,
-    // };
-    // var reader = file.reader();
+    try editor.setMessage("HELP: Ctrl-q = quit", .{});
 
     while (try io.processKeypress(&editor)) {
         try io.refreshScreen(&editor);

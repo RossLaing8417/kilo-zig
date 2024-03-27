@@ -40,6 +40,8 @@ render: Coord,
 row_offset: usize,
 col_offset: usize,
 rows: ?[][]u8,
+message_buffer: std.BoundedArray(u8, 512),
+message_time: i64,
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -47,7 +49,7 @@ pub fn init(
     writer: Writer,
     orig_termios: std.os.termios,
     screen: WinSize,
-) Editor {
+) !Editor {
     return .{
         .allocator = allocator,
         .file_name = "",
@@ -60,6 +62,8 @@ pub fn init(
         .row_offset = 0,
         .col_offset = 0,
         .rows = null,
+        .message_buffer = try std.BoundedArray(u8, 512).init(0),
+        .message_time = std.time.timestamp(),
     };
 }
 
@@ -136,4 +140,10 @@ fn cursorToRender(row: []const u8, cursor: Coord) Coord {
         render.x += 1;
     }
     return render;
+}
+
+pub fn setMessage(self: *Editor, comptime format: []const u8, comptime args: anytype) !void {
+    var writer = self.message_buffer.writer();
+    try writer.print(format, args);
+    self.message_time = std.time.timestamp();
 }
