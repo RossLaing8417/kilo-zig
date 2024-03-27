@@ -122,8 +122,14 @@ fn moveCursor(editor: *Editor, key: Editor.Key) void {
         .HOME => editor.cursor.x = 0,
         .END => editor.cursor.x = row.len,
 
-        .PAGE_UP => editor.cursor.y = 0,
-        .PAGE_DOWN => editor.cursor.y = editor.screen.ws_row - 1,
+        .PAGE_UP => {
+            editor.cursor.y = editor.row_offset;
+            editor.row_offset -= if (editor.screen.ws_row > editor.row_offset) editor.row_offset else editor.screen.ws_row;
+        },
+        .PAGE_DOWN => {
+            editor.cursor.y = @min(editor.row_offset + editor.screen.ws_row - 1, editor.screen.ws_row);
+            editor.row_offset = @min(editor.row_offset + editor.screen.ws_row - 1, rows.len);
+        },
 
         else => {},
     }
