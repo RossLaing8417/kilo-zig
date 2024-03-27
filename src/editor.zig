@@ -105,6 +105,8 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
 }
 
 pub fn scroll(self: *Editor) void {
+    const drawable = self.screen.ws_row - 2;
+
     self.render.x = 0;
 
     if (self.rows != null and self.cursor.y < self.rows.?.len) {
@@ -114,8 +116,8 @@ pub fn scroll(self: *Editor) void {
     if (self.cursor.y < self.row_offset) {
         self.row_offset = self.cursor.y;
     }
-    if (self.cursor.y >= self.row_offset + self.screen.ws_row) {
-        self.row_offset = self.cursor.y - self.screen.ws_row + 1;
+    if (self.cursor.y >= self.row_offset + drawable) {
+        self.row_offset = self.cursor.y - drawable + 1;
     }
     if (self.cursor.x < self.col_offset) {
         self.col_offset = self.cursor.x;
