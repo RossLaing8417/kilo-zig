@@ -13,14 +13,24 @@ pub fn main() !void {
     var out_stream = std.io.bufferedWriter(std.io.getStdOut().writer());
     defer out_stream.flush() catch {};
 
-    var editor: Editor = .{
-        .allocator = allocator,
-        .reader = std.io.getStdIn().reader(),
-        .writer = out_stream.writer(),
-        .orig_termios = try terminal.enableRawMode(),
-        .screen = try terminal.getWindowSize(),
-        .cursor = .{ .x = 0, .y = 0 },
-    };
+    var editor = Editor.init(
+        allocator,
+        std.io.getStdIn().reader(),
+        out_stream.writer(),
+        try terminal.enableRawMode(),
+        try terminal.getWindowSize(),
+    );
+    defer editor.deinit();
+
+    var args = std.process.args();
+    var filename: ?[]const u8 = null;
+    if (args.skip()) {
+        filename = args.next();
+    }
+
+    if (filename) |fname| {
+        try editor.openFile(fname);
+    }
 
     defer terminal.disableRawMode(editor.orig_termios) catch |err| {
         std.debug.panic("Error setting termios back to original state:\r\n{}\r\n", .{err});

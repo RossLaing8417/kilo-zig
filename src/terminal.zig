@@ -44,6 +44,8 @@ pub fn readKey(reader: Editor.Reader) !u32 {
                     'C' => return keyFromEnum(.ARROW_RIGHT),
                     'D' => return keyFromEnum(.ARROW_LEFT),
                     '0'...'9' => if (bytes.get(2) == '~') switch (bytes.get(1)) {
+                        '3' => return keyFromEnum(.DELETE),
+
                         '1', '7' => return keyFromEnum(.HOME),
                         '4', '8' => return keyFromEnum(.END),
 
