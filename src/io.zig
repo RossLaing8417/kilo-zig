@@ -5,6 +5,8 @@ const terminal = @import("terminal.zig");
 
 const keyFromEnum = Editor.Key.intFromEnum;
 
+var quitting = false;
+
 pub fn ctrlKey(key: u32) u32 {
     return key & 0x1F;
 }
@@ -14,8 +16,15 @@ pub fn processKeypress(editor: *Editor) !bool {
 
     switch (key) {
         0 => {},
-        ctrlKey('q') => return false,
-        ctrlKey('s') => editor.save() catch |err| {
+        ctrlKey('q') => {
+            if (editor.dirty) {
+                quitting = true;
+                try editor.setMessage("Quit without saving? (y/n)", .{});
+            } else {
+                return false;
+            }
+        },
+        ctrlKey('s') => editor.saveFile() catch |err| {
             try editor.setMessage("Error saving file: {}", .{err});
         },
 
@@ -40,7 +49,17 @@ pub fn processKeypress(editor: *Editor) !bool {
         ctrlKey('l'),
         => {},
 
-        else => try editor.insertChar(@intCast(key)),
+        else => {
+            if (quitting) {
+                if (key == 'y') {
+                    return false;
+                } else if (key == 'n') {
+                    quitting = false;
+                }
+            } else {
+                try editor.insertChar(@intCast(key));
+            }
+        },
     }
 
     return true;
@@ -111,6 +130,9 @@ fn drawStatusBar(editor: *Editor) !void {
         if (editor.file_name.len > 0) editor.file_name else "[No Name]",
         editor.rows.len,
     });
+    if (editor.dirty) {
+        try buf_writer.writeAll(" (modified)");
+    }
 
     const fstat_len = blk: {
         var slice = buffer.constSlice();

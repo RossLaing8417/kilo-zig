@@ -43,6 +43,7 @@ col_offset: usize,
 rows: [][]u8,
 message_buffer: std.BoundedArray(u8, 512),
 message_time: i64,
+dirty: bool,
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -69,6 +70,7 @@ pub fn init(
         .rows = try allocator.alloc([]u8, 0),
         .message_buffer = try std.BoundedArray(u8, 512).init(0),
         .message_time = std.time.timestamp(),
+        .dirty = false,
     };
 }
 
@@ -106,6 +108,8 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
         }
         self.rows[i] = try self.allocator.dupe(u8, line[0..len]);
     }
+
+    self.dirty = false;
 }
 
 pub fn scroll(self: *Editor) void {
@@ -169,9 +173,14 @@ pub fn insertChar(self: *Editor, char: u8) !void {
     }
     self.rows[self.cursor.y] = try rowInstertChar(self.allocator, self.rows[self.cursor.y], self.cursor.x, char);
     self.cursor.x += 1;
+    self.dirty = true;
 }
 
-pub fn save(self: *Editor) !void {
+pub fn saveFile(self: *Editor) !void {
+    if (!self.dirty) {
+        return;
+    }
+
     var file = try std.fs.cwd().createFile(self.file_name, .{});
     defer file.close();
 
@@ -184,5 +193,6 @@ pub fn save(self: *Editor) !void {
     }
     bytes += try writer.write(self.rows[self.rows.len - 1]);
 
+    self.dirty = false;
     try self.setMessage("{} bytes written to disk", .{bytes});
 }
