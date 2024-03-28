@@ -11,6 +11,7 @@ pub const VERSION = "0.0.1";
 pub const TAB_STOP = 4;
 
 pub const Key = enum(u32) {
+    BACKSPACE = 127,
     ARROW_UP = 1000,
     ARROW_DOWN,
     ARROW_LEFT,
@@ -39,7 +40,7 @@ cursor: Coord,
 render: Coord,
 row_offset: usize,
 col_offset: usize,
-rows: ?[][]u8,
+rows: [][]u8,
 message_buffer: std.BoundedArray(u8, 512),
 message_time: i64,
 
@@ -56,28 +57,26 @@ pub fn init(
         .reader = reader,
         .writer = writer,
         .orig_termios = orig_termios,
-        .screen = screen,
+        .screen = blk: {
+            var tmp = screen;
+            tmp.ws_row -= 2;
+            break :blk tmp;
+        },
         .cursor = .{ .x = 0, .y = 0 },
         .render = .{ .x = 0, .y = 0 },
         .row_offset = 0,
         .col_offset = 0,
-        .rows = null,
+        .rows = try allocator.alloc([]u8, 0),
         .message_buffer = try std.BoundedArray(u8, 512).init(0),
         .message_time = std.time.timestamp(),
     };
 }
 
 pub fn deinit(self: *Editor) void {
-    self.freeRows();
-}
-
-fn freeRows(self: *Editor) void {
-    if (self.rows) |rows| {
-        for (rows) |row| {
-            self.allocator.free(row);
-        }
-        self.allocator.free(rows);
+    for (self.rows) |row| {
+        self.allocator.free(row);
     }
+    self.allocator.free(self.rows);
 }
 
 pub fn openFile(self: *Editor, file_name: []const u8) !void {
@@ -87,11 +86,16 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
     const source = try file.readToEndAlloc(self.allocator, (try file.metadata()).size());
     defer self.allocator.free(source);
 
-    self.freeRows();
-
     self.file_name = file_name;
-    self.rows = try self.allocator.alloc([]u8, std.mem.count(u8, source, "\n") + 1);
-    var rows = self.rows.?;
+
+    const line_count = std.mem.count(u8, source, "\n") + 1;
+    if (line_count < self.rows.len) {
+        for (self.rows[line_count..]) |row| {
+            self.allocator.free(row);
+        }
+    }
+
+    self.rows = try self.allocator.realloc(self.rows, line_count);
 
     var i: usize = 0;
     var itr = std.mem.splitSequence(u8, source, "\n");
@@ -100,24 +104,22 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
         if (std.mem.endsWith(u8, line, "\r")) {
             len -= 1;
         }
-        rows[i] = try self.allocator.dupe(u8, line[0..len]);
+        self.rows[i] = try self.allocator.dupe(u8, line[0..len]);
     }
 }
 
 pub fn scroll(self: *Editor) void {
-    const drawable = self.screen.ws_row - 2;
-
     self.render.x = 0;
 
-    if (self.rows != null and self.cursor.y < self.rows.?.len) {
-        self.render = cursorToRender(self.rows.?[self.cursor.y], self.cursor);
+    if (self.cursor.y < self.rows.len) {
+        self.render = cursorToRender(self.rows[self.cursor.y], self.cursor);
     }
 
     if (self.cursor.y < self.row_offset) {
         self.row_offset = self.cursor.y;
     }
-    if (self.cursor.y >= self.row_offset + drawable) {
-        self.row_offset = self.cursor.y - drawable + 1;
+    if (self.cursor.y >= self.row_offset + self.screen.ws_row) {
+        self.row_offset = self.cursor.y - self.screen.ws_row + 1;
     }
     if (self.cursor.x < self.col_offset) {
         self.col_offset = self.cursor.x;
@@ -144,8 +146,43 @@ fn cursorToRender(row: []const u8, cursor: Coord) Coord {
     return render;
 }
 
-pub fn setMessage(self: *Editor, comptime format: []const u8, comptime args: anytype) !void {
+pub fn setMessage(self: *Editor, comptime format: []const u8, args: anytype) !void {
+    try self.message_buffer.resize(0);
     var writer = self.message_buffer.writer();
     try writer.print(format, args);
     self.message_time = std.time.timestamp();
+}
+
+fn rowInstertChar(allocator: std.mem.Allocator, row: []u8, at: usize, char: u8) ![]u8 {
+    var new_row = try allocator.realloc(row, row.len + 1);
+
+    std.mem.copyForwards(u8, new_row[at + 1 ..], new_row[at .. new_row.len - 1]);
+    new_row[at] = char;
+
+    return new_row;
+}
+
+pub fn insertChar(self: *Editor, char: u8) !void {
+    if (self.cursor.y == self.rows.len) {
+        self.rows = try self.allocator.realloc(self.rows, self.rows.len + 1);
+        self.rows[self.cursor.y] = try self.allocator.alloc(u8, 0);
+    }
+    self.rows[self.cursor.y] = try rowInstertChar(self.allocator, self.rows[self.cursor.y], self.cursor.x, char);
+    self.cursor.x += 1;
+}
+
+pub fn save(self: *Editor) !void {
+    var file = try std.fs.cwd().createFile(self.file_name, .{});
+    defer file.close();
+
+    var bytes: usize = 0;
+
+    var writer = file.writer();
+    for (self.rows[0 .. self.rows.len - 1]) |row| {
+        bytes += try writer.write(row);
+        bytes += try writer.write("\n");
+    }
+    bytes += try writer.write(self.rows[self.rows.len - 1]);
+
+    try self.setMessage("{} bytes written to disk", .{bytes});
 }

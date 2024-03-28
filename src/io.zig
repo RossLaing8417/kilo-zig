@@ -13,7 +13,11 @@ pub fn processKeypress(editor: *Editor) !bool {
     const key = try terminal.readKey(editor.reader);
 
     switch (key) {
+        0 => {},
         ctrlKey('q') => return false,
+        ctrlKey('s') => editor.save() catch |err| {
+            try editor.setMessage("Error saving file: {}", .{err});
+        },
 
         keyFromEnum(.ARROW_UP),
         keyFromEnum(.ARROW_DOWN),
@@ -25,7 +29,18 @@ pub fn processKeypress(editor: *Editor) !bool {
         keyFromEnum(.PAGE_DOWN),
         => moveCursor(editor, @enumFromInt(key)),
 
-        else => {},
+        '\r' => {},
+
+        ctrlKey('h'),
+        keyFromEnum(.BACKSPACE),
+        keyFromEnum(.DELETE),
+        => {},
+
+        '\x1B',
+        ctrlKey('l'),
+        => {},
+
+        else => try editor.insertChar(@intCast(key)),
     }
 
     return true;
@@ -51,12 +66,10 @@ pub fn refreshScreen(editor: *Editor) !void {
 
 fn drawRows(editor: *Editor) !void {
     var writer = editor.writer;
-    const rows = editor.rows orelse &[_][]u8{};
-    const drawable = editor.screen.ws_row - 2;
 
-    for (0..drawable, editor.row_offset..) |screen_row, file_row| {
-        if (rows.len == 0 or file_row >= rows.len) {
-            if (rows.len > 0 and screen_row == drawable / 3) {
+    for (0..editor.screen.ws_row, editor.row_offset..) |screen_row, file_row| {
+        if (editor.rows.len == 0 or file_row >= editor.rows.len) {
+            if (editor.rows.len > 0 and screen_row == editor.screen.ws_row / 3) {
                 const message = "Kilo editor -- version " ++ Editor.VERSION;
                 const length = @min(message.len, editor.screen.ws_col);
                 const padding = (editor.screen.ws_col - length) / 2;
@@ -70,8 +83,8 @@ fn drawRows(editor: *Editor) !void {
             } else {
                 try writer.writeByte('~');
             }
-        } else if (rows.len > 0) {
-            const row = rows[file_row];
+        } else if (editor.rows.len > 0) {
+            const row = editor.rows[file_row];
             if (row.len > 0 and editor.col_offset < row.len) {
                 const start = @min(row.len - 1, editor.col_offset);
                 const end = @min(row.len, editor.screen.ws_col);
@@ -96,7 +109,7 @@ fn drawStatusBar(editor: *Editor) !void {
 
     try buf_writer.print("{s} - {d} lines", .{
         if (editor.file_name.len > 0) editor.file_name else "[No Name]",
-        if (editor.rows) |rows| rows.len else 0,
+        editor.rows.len,
     });
 
     const fstat_len = blk: {
@@ -109,7 +122,7 @@ fn drawStatusBar(editor: *Editor) !void {
 
     try buf_writer.print("{d}/{d}", .{
         editor.cursor.y + 1,
-        if (editor.rows) |rows| rows.len else 0,
+        editor.rows.len,
     });
 
     var slice = buffer.constSlice();
@@ -130,19 +143,16 @@ fn drawMessage(editor: *Editor) !void {
 }
 
 fn moveCursor(editor: *Editor, key: Editor.Key) void {
-    const drawable = editor.screen.ws_row - 2;
-
-    const rows = editor.rows orelse &[_][]u8{};
-    var row = if (editor.cursor.y >= rows.len) &[_]u8{} else rows[editor.cursor.y];
+    var row = if (editor.cursor.y >= editor.rows.len) &[_]u8{} else editor.rows[editor.cursor.y];
 
     switch (key) {
         .ARROW_LEFT => if (editor.cursor.x > 0) {
             editor.cursor.x -= 1;
         } else if (editor.cursor.y > 0) {
             editor.cursor.y -= 1;
-            editor.cursor.x = rows[editor.cursor.y].len;
+            editor.cursor.x = editor.rows[editor.cursor.y].len;
         },
-        .ARROW_DOWN => if (editor.cursor.y < rows.len) {
+        .ARROW_DOWN => if (editor.cursor.y < editor.rows.len) {
             editor.cursor.y += 1;
         },
         .ARROW_UP => if (editor.cursor.y > 0) {
@@ -150,7 +160,7 @@ fn moveCursor(editor: *Editor, key: Editor.Key) void {
         },
         .ARROW_RIGHT => if (editor.cursor.x < row.len) {
             editor.cursor.x += 1;
-        } else if (editor.cursor.y < rows.len and editor.cursor.x == row.len) {
+        } else if (editor.cursor.y < editor.rows.len and editor.cursor.x == row.len) {
             editor.cursor.y += 1;
             editor.cursor.x = 0;
         },
@@ -161,18 +171,18 @@ fn moveCursor(editor: *Editor, key: Editor.Key) void {
         // TODO: Fix me!
         .PAGE_UP => {
             editor.cursor.y = editor.row_offset;
-            editor.row_offset -= if (drawable > editor.row_offset) editor.row_offset else drawable;
+            editor.row_offset -= if (editor.screen.ws_row > editor.row_offset) editor.row_offset else editor.screen.ws_row;
         },
         // TODO: Fix me!
         .PAGE_DOWN => {
-            editor.cursor.y = @min(editor.row_offset + drawable - 1, drawable);
-            editor.row_offset = @min(editor.row_offset + drawable - 1, rows.len);
+            editor.cursor.y = @min(editor.row_offset + editor.screen.ws_row - 1, editor.screen.ws_row);
+            editor.row_offset = @min(editor.row_offset + editor.screen.ws_row - 1, editor.rows.len);
         },
 
         else => {},
     }
 
-    row = if (editor.cursor.y >= rows.len) &[_]u8{} else rows[editor.cursor.y];
+    row = if (editor.cursor.y >= editor.rows.len) &[_]u8{} else editor.rows[editor.cursor.y];
     if (editor.cursor.x > row.len) {
         editor.cursor.x = row.len;
     }

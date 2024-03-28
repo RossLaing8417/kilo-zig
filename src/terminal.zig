@@ -30,7 +30,7 @@ pub fn readKey(reader: Editor.Reader) !u32 {
         const key = reader.readByte() catch |err| switch (err) {
             error.WouldBlock,
             error.EndOfStream,
-            => return '0',
+            => return 0,
             else => return err,
         };
 
