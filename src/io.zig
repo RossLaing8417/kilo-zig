@@ -17,7 +17,7 @@ pub fn processKeypress(editor: *Editor) !bool {
     switch (key) {
         0 => {},
         ctrlKey('q') => {
-            if (editor.dirty) {
+            if (editor.dirty and !quitting) {
                 quitting = true;
                 try editor.setMessage("Quit without saving? (y/n)", .{});
             } else {
@@ -88,7 +88,7 @@ fn drawRows(editor: *Editor) !void {
 
     for (0..editor.screen.ws_row, editor.row_offset..) |screen_row, file_row| {
         if (editor.rows.items.len == 0 or file_row >= editor.rows.items.len) {
-            if (editor.rows.items.len > 0 and screen_row == editor.screen.ws_row / 3) {
+            if (editor.rows.items.len == 0 and screen_row == editor.screen.ws_row / 3) {
                 const message = "Kilo editor -- version " ++ Editor.VERSION;
                 const length = @min(message.len, editor.screen.ws_col);
                 const padding = (editor.screen.ws_col - length) / 2;

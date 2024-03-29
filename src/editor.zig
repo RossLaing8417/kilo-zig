@@ -2,6 +2,9 @@ const std = @import("std");
 
 const Editor = @This();
 
+const Row = std.ArrayList(u8);
+const Rows = std.ArrayList(*Row);
+
 pub const Reader = std.io.Reader(std.fs.File, std.fs.File.ReadError, std.fs.File.read);
 pub const Writer = std.io.BufferedWriter(4096, std.io.Writer(std.fs.File, std.fs.File.WriteError, std.fs.File.write)).Writer;
 
@@ -40,7 +43,7 @@ cursor: Coord,
 render: Coord,
 row_offset: usize,
 col_offset: usize,
-rows: std.ArrayList(std.ArrayList(u8)),
+rows: *Rows,
 message_buffer: std.BoundedArray(u8, 512),
 message_time: i64,
 dirty: bool,
@@ -67,7 +70,11 @@ pub fn init(
         .render = .{ .x = 0, .y = 0 },
         .row_offset = 0,
         .col_offset = 0,
-        .rows = std.ArrayList(std.ArrayList(u8)).init(allocator),
+        .rows = blk: {
+            var rows = try allocator.create(Rows);
+            rows.* = Rows.init(allocator);
+            break :blk rows;
+        },
         .message_buffer = try std.BoundedArray(u8, 512).init(0),
         .message_time = std.time.timestamp(),
         .dirty = false,
@@ -77,8 +84,10 @@ pub fn init(
 pub fn deinit(self: *Editor) void {
     for (self.rows.items) |row| {
         row.deinit();
+        self.allocator.destroy(row);
     }
     self.rows.deinit();
+    self.allocator.destroy(self.rows);
 }
 
 pub fn openFile(self: *Editor, file_name: []const u8) !void {
@@ -94,6 +103,7 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
     if (line_count < self.rows.items.len) {
         for (self.rows.items[line_count..]) |row| {
             row.deinit();
+            self.allocator.destroy(row);
         }
         self.rows.shrinkRetainingCapacity(line_count);
     } else {
@@ -111,7 +121,8 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
             self.rows.items[i].shrinkRetainingCapacity(len);
             try self.rows.items[i].replaceRange(0, len, line[0..len]);
         } else {
-            var row = try std.ArrayList(u8).initCapacity(self.allocator, len);
+            var row = try self.allocator.create(Row);
+            row.* = try Row.initCapacity(self.allocator, len);
             row.appendSliceAssumeCapacity(line[0..len]);
             self.rows.appendAssumeCapacity(row);
         }
@@ -167,7 +178,9 @@ pub fn setMessage(self: *Editor, comptime format: []const u8, args: anytype) !vo
 
 pub fn insertChar(self: *Editor, char: u8) !void {
     if (self.cursor.y == self.rows.items.len) {
-        try self.rows.append(std.ArrayList(u8).init(self.allocator));
+        var row = try self.allocator.create(Row);
+        row.* = Row.init(self.allocator);
+        try self.rows.append(row);
     }
     try self.rows.items[self.cursor.y].insert(self.cursor.x, char);
     self.cursor.x += 1;
