@@ -40,7 +40,7 @@ cursor: Coord,
 render: Coord,
 row_offset: usize,
 col_offset: usize,
-rows: [][]u8,
+rows: std.ArrayList(std.ArrayList(u8)),
 message_buffer: std.BoundedArray(u8, 512),
 message_time: i64,
 dirty: bool,
@@ -67,7 +67,7 @@ pub fn init(
         .render = .{ .x = 0, .y = 0 },
         .row_offset = 0,
         .col_offset = 0,
-        .rows = try allocator.alloc([]u8, 0),
+        .rows = std.ArrayList(std.ArrayList(u8)).init(allocator),
         .message_buffer = try std.BoundedArray(u8, 512).init(0),
         .message_time = std.time.timestamp(),
         .dirty = false,
@@ -75,10 +75,10 @@ pub fn init(
 }
 
 pub fn deinit(self: *Editor) void {
-    for (self.rows) |row| {
-        self.allocator.free(row);
+    for (self.rows.items) |row| {
+        row.deinit();
     }
-    self.allocator.free(self.rows);
+    self.rows.deinit();
 }
 
 pub fn openFile(self: *Editor, file_name: []const u8) !void {
@@ -91,13 +91,14 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
     self.file_name = file_name;
 
     const line_count = std.mem.count(u8, source, "\n") + 1;
-    if (line_count < self.rows.len) {
-        for (self.rows[line_count..]) |row| {
-            self.allocator.free(row);
+    if (line_count < self.rows.items.len) {
+        for (self.rows.items[line_count..]) |row| {
+            row.deinit();
         }
+        self.rows.shrinkRetainingCapacity(line_count);
+    } else {
+        try self.rows.ensureTotalCapacity(line_count);
     }
-
-    self.rows = try self.allocator.realloc(self.rows, line_count);
 
     var i: usize = 0;
     var itr = std.mem.splitSequence(u8, source, "\n");
@@ -106,7 +107,14 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
         if (std.mem.endsWith(u8, line, "\r")) {
             len -= 1;
         }
-        self.rows[i] = try self.allocator.dupe(u8, line[0..len]);
+        if (i < self.rows.items.len) {
+            self.rows.items[i].shrinkRetainingCapacity(len);
+            try self.rows.items[i].replaceRange(0, len, line[0..len]);
+        } else {
+            var row = try std.ArrayList(u8).initCapacity(self.allocator, len);
+            row.appendSliceAssumeCapacity(line[0..len]);
+            self.rows.appendAssumeCapacity(row);
+        }
     }
 
     self.dirty = false;
@@ -115,8 +123,8 @@ pub fn openFile(self: *Editor, file_name: []const u8) !void {
 pub fn scroll(self: *Editor) void {
     self.render.x = 0;
 
-    if (self.cursor.y < self.rows.len) {
-        self.render = cursorToRender(self.rows[self.cursor.y], self.cursor);
+    if (self.cursor.y < self.rows.items.len) {
+        self.render = cursorToRender(self.rows.items[self.cursor.y].items, self.cursor);
     }
 
     if (self.cursor.y < self.row_offset) {
@@ -157,21 +165,11 @@ pub fn setMessage(self: *Editor, comptime format: []const u8, args: anytype) !vo
     self.message_time = std.time.timestamp();
 }
 
-fn rowInstertChar(allocator: std.mem.Allocator, row: []u8, at: usize, char: u8) ![]u8 {
-    var new_row = try allocator.realloc(row, row.len + 1);
-
-    std.mem.copyForwards(u8, new_row[at + 1 ..], new_row[at .. new_row.len - 1]);
-    new_row[at] = char;
-
-    return new_row;
-}
-
 pub fn insertChar(self: *Editor, char: u8) !void {
-    if (self.cursor.y == self.rows.len) {
-        self.rows = try self.allocator.realloc(self.rows, self.rows.len + 1);
-        self.rows[self.cursor.y] = try self.allocator.alloc(u8, 0);
+    if (self.cursor.y == self.rows.items.len) {
+        try self.rows.append(std.ArrayList(u8).init(self.allocator));
     }
-    self.rows[self.cursor.y] = try rowInstertChar(self.allocator, self.rows[self.cursor.y], self.cursor.x, char);
+    try self.rows.items[self.cursor.y].insert(self.cursor.x, char);
     self.cursor.x += 1;
     self.dirty = true;
 }
@@ -187,11 +185,11 @@ pub fn saveFile(self: *Editor) !void {
     var bytes: usize = 0;
 
     var writer = file.writer();
-    for (self.rows[0 .. self.rows.len - 1]) |row| {
-        bytes += try writer.write(row);
+    for (self.rows.items[0 .. self.rows.items.len - 1]) |row| {
+        bytes += try writer.write(row.items);
         bytes += try writer.write("\n");
     }
-    bytes += try writer.write(self.rows[self.rows.len - 1]);
+    bytes += try writer.write(self.rows.items[self.rows.items.len - 1].items);
 
     self.dirty = false;
     try self.setMessage("{} bytes written to disk", .{bytes});
