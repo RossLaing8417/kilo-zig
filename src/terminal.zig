@@ -37,30 +37,32 @@ pub fn readKey(reader: Editor.Reader) !u32 {
         if (key == '\x1B') {
             const bytes = try reader.readBoundedBytes(3);
 
-            switch (bytes.get(0)) {
-                '[' => switch (bytes.get(1)) {
-                    'A' => return keyFromEnum(.ARROW_UP),
-                    'B' => return keyFromEnum(.ARROW_DOWN),
-                    'C' => return keyFromEnum(.ARROW_RIGHT),
-                    'D' => return keyFromEnum(.ARROW_LEFT),
-                    '0'...'9' => if (bytes.get(2) == '~') switch (bytes.get(1)) {
-                        '3' => return keyFromEnum(.DELETE),
+            if (bytes.len > 0) {
+                switch (bytes.get(0)) {
+                    '[' => switch (bytes.get(1)) {
+                        'A' => return keyFromEnum(.ARROW_UP),
+                        'B' => return keyFromEnum(.ARROW_DOWN),
+                        'C' => return keyFromEnum(.ARROW_RIGHT),
+                        'D' => return keyFromEnum(.ARROW_LEFT),
+                        '0'...'9' => if (bytes.get(2) == '~') switch (bytes.get(1)) {
+                            '3' => return keyFromEnum(.DELETE),
 
-                        '1', '7' => return keyFromEnum(.HOME),
-                        '4', '8' => return keyFromEnum(.END),
+                            '1', '7' => return keyFromEnum(.HOME),
+                            '4', '8' => return keyFromEnum(.END),
 
-                        '5' => return keyFromEnum(.PAGE_UP),
-                        '6' => return keyFromEnum(.PAGE_DOWN),
+                            '5' => return keyFromEnum(.PAGE_UP),
+                            '6' => return keyFromEnum(.PAGE_DOWN),
+                            else => {},
+                        },
+                        else => {},
+                    },
+                    'O' => switch (bytes.get(1)) {
+                        'H' => return keyFromEnum(.HOME),
+                        'F' => return keyFromEnum(.END),
                         else => {},
                     },
                     else => {},
-                },
-                'O' => switch (bytes.get(1)) {
-                    'H' => return keyFromEnum(.HOME),
-                    'F' => return keyFromEnum(.END),
-                    else => {},
-                },
-                else => {},
+                }
             }
         }
 

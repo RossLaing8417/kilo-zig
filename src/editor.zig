@@ -2,6 +2,9 @@ const std = @import("std");
 
 const Editor = @This();
 
+const terminal = @import("terminal.zig");
+const io = @import("io.zig");
+
 const Row = std.ArrayList(u8);
 const Rows = std.ArrayList(*Row);
 
@@ -47,6 +50,7 @@ rows: *Rows,
 message_buffer: std.BoundedArray(u8, 512),
 message_time: i64,
 dirty: bool,
+prompt_buffer: std.BoundedArray(u8, 512),
 
 pub fn init(
     allocator: std.mem.Allocator,
@@ -78,6 +82,7 @@ pub fn init(
         .message_buffer = try std.BoundedArray(u8, 512).init(0),
         .message_time = std.time.timestamp(),
         .dirty = false,
+        .prompt_buffer = try std.BoundedArray(u8, 512).init(0),
     };
 }
 
@@ -233,6 +238,14 @@ pub fn saveFile(self: *Editor) !void {
         return;
     }
 
+    if (self.file_name.len == 0) {
+        self.file_name = try self.prompt("Save as: {s}");
+        if (self.file_name.len == 0) {
+            try self.setMessage("Save aborted", .{});
+            return;
+        }
+    }
+
     var file = try std.fs.cwd().createFile(self.file_name, .{});
     defer file.close();
 
@@ -247,4 +260,33 @@ pub fn saveFile(self: *Editor) !void {
 
     self.dirty = false;
     try self.setMessage("{} bytes written to disk", .{bytes});
+}
+
+fn prompt(self: *Editor, comptime format: []const u8) ![]const u8 {
+    try self.prompt_buffer.resize(0);
+    while (true) {
+        const slice = self.prompt_buffer.constSlice();
+        try self.setMessage(format, .{slice});
+        try io.refreshScreen(self);
+
+        const key = try terminal.readKey(self.reader);
+        switch (key) {
+            '\x1B' => {
+                try self.message_buffer.resize(0);
+                return "";
+            },
+            Key.intFromEnum(.BACKSPACE) => if (self.prompt_buffer.len > 0) {
+                try self.prompt_buffer.resize(self.prompt_buffer.len - 1);
+            },
+            '\r' => {
+                if (slice.len != 0) {
+                    try self.message_buffer.resize(0);
+                    return slice;
+                }
+            },
+            else => if (key < 128 and !std.ascii.isControl(@intCast(key))) {
+                try self.prompt_buffer.append(@intCast(key));
+            },
+        }
+    }
 }
