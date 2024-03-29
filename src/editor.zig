@@ -187,6 +187,29 @@ pub fn insertChar(self: *Editor, char: u8) !void {
     self.dirty = true;
 }
 
+pub fn deleteChar(self: *Editor) !void {
+    if (self.cursor.y >= self.rows.items.len) {
+        return;
+    }
+
+    if (self.cursor.x == 0) {
+        if (self.cursor.y == 0) {
+            return;
+        }
+        var row = self.rows.orderedRemove(self.cursor.y);
+        defer row.deinit();
+        self.cursor.y -= 1;
+        self.cursor.x = self.rows.items[self.cursor.y].items.len;
+        try self.rows.items[self.cursor.y].appendSlice(row.items);
+        return;
+    }
+
+    var row = self.rows.items[self.cursor.y];
+    _ = row.orderedRemove(self.cursor.x - 1);
+    self.cursor.x -= 1;
+    self.dirty = true;
+}
+
 pub fn saveFile(self: *Editor) !void {
     if (!self.dirty) {
         return;

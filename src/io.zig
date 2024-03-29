@@ -43,7 +43,12 @@ pub fn processKeypress(editor: *Editor) !bool {
         ctrlKey('h'),
         keyFromEnum(.BACKSPACE),
         keyFromEnum(.DELETE),
-        => {},
+        => {
+            if (key == keyFromEnum(.DELETE)) {
+                moveCursor(editor, .ARROW_RIGHT);
+            }
+            try editor.deleteChar();
+        },
 
         '\x1B',
         ctrlKey('l'),
