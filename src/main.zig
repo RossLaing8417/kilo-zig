@@ -40,7 +40,7 @@ pub fn main() !void {
         std.debug.panic("Error refreshing screen:\r\n{}\r\n", .{err});
     };
 
-    try editor.setMessage("HELP: Ctrl-s = save | Ctrl-q = quit", .{});
+    try editor.setMessage("HELP: Ctrl-s = save | Ctrl-q = quit | Ctrl-/ = find", .{});
 
     while (try io.processKeypress(&editor)) {
         try io.refreshScreen(&editor);

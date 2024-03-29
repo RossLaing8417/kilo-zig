@@ -24,9 +24,14 @@ pub fn processKeypress(editor: *Editor) !bool {
                 return false;
             }
         },
+
         ctrlKey('s') => editor.saveFile() catch |err| {
             try editor.setMessage("Error saving file: {}", .{err});
         },
+
+        ctrlKey('/'),
+        ctrlKey('?'),
+        => try editor.find(),
 
         keyFromEnum(.ARROW_UP),
         keyFromEnum(.ARROW_DOWN),

@@ -140,7 +140,7 @@ pub fn scroll(self: *Editor) void {
     self.render.x = 0;
 
     if (self.cursor.y < self.rows.items.len) {
-        self.render = cursorToRender(self.rows.items[self.cursor.y].items, self.cursor);
+        self.render.x = cursorXToRenderX(self.rows.items[self.cursor.y].items, self.cursor.x);
     }
 
     if (self.cursor.y < self.row_offset) {
@@ -163,15 +163,29 @@ pub fn scroll(self: *Editor) void {
     }
 }
 
-fn cursorToRender(row: []const u8, cursor: Coord) Coord {
-    var render: Coord = .{ .x = 0, .y = 0 };
-    for (0..cursor.x) |x| {
+fn cursorXToRenderX(row: []const u8, cx: usize) usize {
+    var rx: usize = 0;
+    for (0..cx) |x| {
         if (row[x] == '\t') {
-            render.x += (TAB_STOP - 1) - (render.x % TAB_STOP);
+            rx += (TAB_STOP - 1) - (rx % TAB_STOP);
         }
-        render.x += 1;
+        rx += 1;
     }
-    return render;
+    return rx;
+}
+
+fn renderXToCursorX(row: []const u8, rx: usize) usize {
+    var cur_rx: usize = 0;
+    for (row, 0..) |char, cx| {
+        if (char == '\t') {
+            cur_rx = (TAB_STOP - 1) - (cur_rx % TAB_STOP);
+        }
+        cur_rx += 1;
+        if (cur_rx > rx) {
+            return cx;
+        }
+    }
+    return row.len;
 }
 
 pub fn setMessage(self: *Editor, comptime format: []const u8, args: anytype) !void {
@@ -287,6 +301,22 @@ fn prompt(self: *Editor, comptime format: []const u8) ![]const u8 {
             else => if (key < 128 and !std.ascii.isControl(@intCast(key))) {
                 try self.prompt_buffer.append(@intCast(key));
             },
+        }
+    }
+}
+
+pub fn find(self: *Editor) !void {
+    const query = try self.prompt("Search: {s} (ESC to cancel)");
+    if (query.len == 0) {
+        return;
+    }
+
+    for (self.rows.items, 0..) |row, y| {
+        if (std.mem.indexOf(u8, row.items, query)) |x| {
+            self.cursor.y = y;
+            self.cursor.x = renderXToCursorX(row.items, x);
+            self.row_offset = self.rows.items.len;
+            return;
         }
     }
 }
