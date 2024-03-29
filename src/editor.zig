@@ -34,6 +34,22 @@ pub const Key = enum(u32) {
     }
 };
 
+pub const Highlight = enum(u8) {
+    NONE = 39,
+    NUMBER = 31,
+    PUNCTUATION = 90,
+
+    pub fn fromByte(byte: u8) Highlight {
+        if (std.ascii.isDigit(byte)) {
+            return .NUMBER;
+        }
+        // if (std.mem.indexOfScalar(u8, "()[]{},.;:", byte)) |_| {
+        //     return .PUNCTUATION;
+        // }
+        return .NONE;
+    }
+};
+
 const Coord = struct { x: usize, y: usize };
 
 allocator: std.mem.Allocator,

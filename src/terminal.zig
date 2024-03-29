@@ -80,7 +80,15 @@ pub fn getWindowSize() !Editor.WinSize {
 }
 
 pub fn render(writer: Editor.Writer, buffer: []const u8) !void {
+    var prv_hl = Editor.Highlight.NONE;
+    var cur_hl = Editor.Highlight.NONE;
+
     for (buffer) |byte| {
+        cur_hl = Editor.Highlight.fromByte(byte);
+        if (cur_hl != prv_hl) {
+            try writer.print("\x1B[{d}m", .{@intFromEnum(cur_hl)});
+            prv_hl = cur_hl;
+        }
         switch (byte) {
             '\t' => try writer.writeByteNTimes(' ', Editor.TAB_STOP),
             else => try writer.writeByte(byte),
