@@ -38,7 +38,7 @@ pub fn processKeypress(editor: *Editor) !bool {
         keyFromEnum(.PAGE_DOWN),
         => moveCursor(editor, @enumFromInt(key)),
 
-        '\r' => {},
+        '\r' => try editor.insertNewLine(),
 
         ctrlKey('h'),
         keyFromEnum(.BACKSPACE),

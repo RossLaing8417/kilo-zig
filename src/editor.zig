@@ -176,6 +176,24 @@ pub fn setMessage(self: *Editor, comptime format: []const u8, args: anytype) !vo
     self.message_time = std.time.timestamp();
 }
 
+pub fn insertNewLine(self: *Editor) !void {
+    var new_row = try self.allocator.create(Row);
+    new_row.* = Row.init(self.allocator);
+    if (self.cursor.x == 0) {
+        try self.rows.insert(self.cursor.y, new_row);
+        self.cursor.y += 1;
+        self.dirty = true;
+        return;
+    }
+    var cur_row = self.rows.items[self.cursor.y];
+    try new_row.appendSlice(cur_row.items[self.cursor.x..]);
+    cur_row.shrinkRetainingCapacity(self.cursor.x);
+    try self.rows.insert(self.cursor.y + 1, new_row);
+    self.cursor.y += 1;
+    self.cursor.x = 0;
+    self.dirty = true;
+}
+
 pub fn insertChar(self: *Editor, char: u8) !void {
     if (self.cursor.y == self.rows.items.len) {
         var row = try self.allocator.create(Row);
