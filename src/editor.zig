@@ -253,7 +253,7 @@ pub fn saveFile(self: *Editor) !void {
     }
 
     if (self.file_name.len == 0) {
-        self.file_name = try self.prompt("Save as: {s}");
+        self.file_name = try self.prompt("Save as: {s}", null);
         if (self.file_name.len == 0) {
             try self.setMessage("Save aborted", .{});
             return;
@@ -276,7 +276,11 @@ pub fn saveFile(self: *Editor) !void {
     try self.setMessage("{} bytes written to disk", .{bytes});
 }
 
-fn prompt(self: *Editor, comptime format: []const u8) ![]const u8 {
+fn prompt(
+    self: *Editor,
+    comptime format: []const u8,
+    callback: (?*const fn (*Editor, []const u8, u32) void),
+) ![]const u8 {
     try self.prompt_buffer.resize(0);
     while (true) {
         const slice = self.prompt_buffer.constSlice();
@@ -285,8 +289,12 @@ fn prompt(self: *Editor, comptime format: []const u8) ![]const u8 {
 
         const key = try terminal.readKey(self.reader);
         switch (key) {
+            0 => continue,
             '\x1B' => {
                 try self.message_buffer.resize(0);
+                if (callback) |func| {
+                    func(self, slice, key);
+                }
                 return "";
             },
             Key.intFromEnum(.BACKSPACE) => if (self.prompt_buffer.len > 0) {
@@ -295,6 +303,9 @@ fn prompt(self: *Editor, comptime format: []const u8) ![]const u8 {
             '\r' => {
                 if (slice.len != 0) {
                     try self.message_buffer.resize(0);
+                    if (callback) |func| {
+                        func(self, slice, key);
+                    }
                     return slice;
                 }
             },
@@ -302,18 +313,69 @@ fn prompt(self: *Editor, comptime format: []const u8) ![]const u8 {
                 try self.prompt_buffer.append(@intCast(key));
             },
         }
+
+        if (callback) |func| {
+            func(self, slice, key);
+        }
     }
 }
 
 pub fn find(self: *Editor) !void {
-    const query = try self.prompt("Search: {s} (ESC to cancel)");
+    const cursor = self.cursor;
+    const row_offset = self.row_offset;
+    const col_offset = self.col_offset;
+
+    const query = try self.prompt("Search: {s} (Use ESC/Arrow/Enter)", &findCallBack);
+
     if (query.len == 0) {
+        self.cursor = cursor;
+        self.row_offset = row_offset;
+        self.col_offset = col_offset;
         return;
     }
+    try self.prompt_buffer.resize(0);
+}
 
-    for (self.rows.items, 0..) |row, y| {
+fn findCallBack(self: *Editor, query: []const u8, char: u32) void {
+    // NOTE: This could be changed to always start at the cursor position
+    const state = struct {
+        var last_match: isize = -1;
+        var direction: i2 = 1;
+    };
+
+    switch (char) {
+        '\r', '\x1B' => {
+            state.last_match = -1;
+            state.direction = 1;
+            return;
+        },
+        Key.intFromEnum(.ARROW_UP),
+        Key.intFromEnum(.ARROW_LEFT),
+        => state.direction = -1,
+        Key.intFromEnum(.ARROW_DOWN),
+        Key.intFromEnum(.ARROW_RIGHT),
+        => state.direction = 1,
+        else => {
+            state.last_match = -1;
+            state.direction = 1;
+        },
+    }
+
+    if (state.last_match == -1) {
+        state.direction = 1;
+    }
+    var y = state.last_match;
+    for (0..self.rows.items.len) |_| {
+        y += state.direction;
+        if (y == -1) {
+            y = @intCast(self.rows.items.len - 1);
+        } else if (y == self.rows.items.len) {
+            y = 0;
+        }
+        const row = self.rows.items[@intCast(y)];
         if (std.mem.indexOf(u8, row.items, query)) |x| {
-            self.cursor.y = y;
+            state.last_match = y;
+            self.cursor.y = @intCast(y);
             self.cursor.x = renderXToCursorX(row.items, x);
             self.row_offset = self.rows.items.len;
             return;
